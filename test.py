@@ -31,11 +31,11 @@ def main(rank):
     bpps = []
     test_config = {
         "dataset_name": f"{args.datasetname}",
-        "data_path": "/extra/ucibdl0/shared/data",
+        "data_path": "*",
         "img_size": 256,
         "img_channel": 3,
     }
-    prefix = "/extra/ucibdl0/ruihan/dcae_evaluate"
+    prefix = "*"
     save_folder = f"{prefix}/{args.img_folder}/{test_config['dataset_name']}_model_{args.alpha}{config.aux_loss_type}-loss{config.loss_type}{config.additional_note}"
     pathlib.Path(save_folder).mkdir(parents=True, exist_ok=True)
     pathlib.Path(f'all_bpps/{args.bpp_folder}').mkdir(parents=True, exist_ok=True)
