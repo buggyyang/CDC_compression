@@ -1,3 +1,3 @@
-- Codebase for our paper [Lossy Image Compression with Conditional Diffusion Models](https://arxiv.org/abs/2209.06950)
+- Codebase for our paper Lossy Image Compression with Conditional Diffusion Models
 - Model weights are available [here](https://drive.google.com/drive/folders/197Wl5cwjaCvrEvggMcyNeHOSxq2rDZ1F?usp=sharing)
 - You may need to write your own testing/training code and import our model. We attach our testing/training code for reference.
