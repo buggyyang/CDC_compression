@@ -81,10 +81,10 @@ class PreNorm(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, dim, dim_out, large=False):
+    def __init__(self, dim, dim_out, large_filter=False):
         super().__init__()
         self.block = nn.Sequential(
-            nn.Conv2d(dim, dim_out, 7 if large else 3, padding=3 if large else 1), LayerNorm(dim_out), nn.ReLU()
+            nn.Conv2d(dim, dim_out, 7 if large_filter else 3, padding=3 if large_filter else 1), LayerNorm(dim_out), nn.ReLU()
         )
 
     def forward(self, x):
@@ -92,7 +92,7 @@ class Block(nn.Module):
 
 
 class ResnetBlock(nn.Module):
-    def __init__(self, dim, dim_out, time_emb_dim=None, large=False):
+    def __init__(self, dim, dim_out, time_emb_dim=None, large_filter=False):
         super().__init__()
         self.mlp = (
             nn.Sequential(nn.LeakyReLU(0.2), nn.Linear(time_emb_dim, dim_out))
@@ -100,7 +100,7 @@ class ResnetBlock(nn.Module):
             else None
         )
 
-        self.block1 = Block(dim, dim_out, large)
+        self.block1 = Block(dim, dim_out, large_filter)
         self.block2 = Block(dim_out, dim_out)
         self.res_conv = nn.Conv2d(dim, dim_out, 1) if dim != dim_out else nn.Identity()
 
@@ -108,7 +108,7 @@ class ResnetBlock(nn.Module):
         h = self.block1(x)
 
         if exists(time_emb):
-            h += self.mlp(time_emb)[:, :, None, None]
+            h = h + self.mlp(time_emb)[:, :, None, None]
 
         h = self.block2(h)
         return h + self.res_conv(x)
@@ -139,166 +139,36 @@ class LinearAttention(nn.Module):
         return self.to_out(out)
 
 
-class ConvLSTMCell(nn.Module):
-    def __init__(self, input_dim, hidden_dim, kernel_size, bias=True, n_layer=1):
-        """
-        Initialize ConvLSTM cell.
-        Parameters
-        ----------
-        input_dim: int
-            Number of channels of input tensor.
-        hidden_dim: int
-            Number of channels of hidden state.
-        kernel_size: (int, int)
-            Size of the convolutional kernel.
-        bias: bool
-            Whether or not to add the bias.
-        """
-
+class LearnedSinusoidalPosEmb(nn.Module):
+    def __init__(self, dim):
         super().__init__()
+        assert (dim % 2) == 0
+        half_dim = dim // 2
+        self.weights = nn.Parameter(torch.randn(half_dim))
 
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
+    def forward(self, x):
+        x = rearrange(x, 'b -> b 1')
+        freqs = x * rearrange(self.weights, 'd -> 1 d') * 2 * math.pi
+        fouriered = torch.cat((freqs.sin(), freqs.cos()), dim = -1)
+        fouriered = torch.cat((x, fouriered), dim = -1)
+        return fouriered
 
-        self.kernel_size = kernel_size
-        self.padding = kernel_size // 2
-        self.bias = bias
-        self.cur_states = [None for i in range(n_layer)]
-        self.n_layer = n_layer
+class ImprovedSinusoidalPosEmb(nn.Module):
+    """ following @crowsonkb 's lead with random (learned optional) sinusoidal pos emb """
+    """ https://github.com/crowsonkb/v-diffusion-jax/blob/master/diffusion/models/danbooru_128.py#L8 """
 
-        self.convs = nn.ModuleList(
-            [
-                nn.Conv2d(
-                    in_channels=self.input_dim + self.hidden_dim,
-                    out_channels=4 * self.hidden_dim,
-                    kernel_size=self.kernel_size,
-                    padding=self.padding,
-                    bias=self.bias,
-                )
-            ]
-            + [
-                nn.Conv2d(
-                    in_channels=self.hidden_dim + self.hidden_dim,
-                    out_channels=4 * self.hidden_dim,
-                    kernel_size=self.kernel_size,
-                    padding=self.padding,
-                    bias=self.bias,
-                )
-                for i in range(n_layer - 1)
-            ]
-        )
-
-    def step_forward(self, input_tensor, layer_index=0):
-        assert self.cur_states[layer_index] is not None
-        h_cur, c_cur = self.cur_states[layer_index]
-        # concatenate along channel axis
-        combined = torch.cat([input_tensor, h_cur], dim=1)
-        combined_conv = self.convs[layer_index](combined)
-        cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.hidden_dim, dim=1)
-        i = torch.sigmoid(cc_i)
-        f = torch.sigmoid(cc_f)
-        o = torch.sigmoid(cc_o)
-        g = torch.tanh(cc_g)
-        c_next = f * c_cur + i * g
-        h_next = o * torch.tanh(c_next)
-
-        self.cur_states[layer_index] = (h_next, c_next)
-
-        return h_next
-
-    def forward(self, input_tensor):
-        for i in range(self.n_layer):
-            input_tensor = self.step_forward(input_tensor, i)
-        return input_tensor
-
-    def init_hidden(self, batch_shape):
-        B, _, H, W = batch_shape
-        for i in range(self.n_layer):
-            self.cur_states[i] = (
-                torch.zeros(B, self.hidden_dim, H, W, device=self.convs[0].weight.device,),
-                torch.zeros(B, self.hidden_dim, H, W, device=self.convs[0].weight.device,),
-            )
-
-
-class ConvGRUCell(nn.Module):
-    def __init__(self, input_dim, hidden_dim, kernel_size, n_layer=1):
-        """
-        Initialize the ConvLSTM cell
-        :param input_size: (int, int)
-            Height and width of input tensor as (height, width).
-        :param input_dim: int
-            Number of channels of input tensor.
-        :param hidden_dim: int
-            Number of channels of hidden state.
-        :param kernel_size: (int, int)
-            Size of the convolutional kernel.
-        :param bias: bool
-            Whether or not to add the bias.
-        :param dtype: torch.cuda.FloatTensor or torch.FloatTensor
-            Whether or not to use cuda.
-        """
+    def __init__(self, dim, is_random = False):
         super().__init__()
-        self.padding = kernel_size // 2
-        self.hidden_dim = hidden_dim
-        self.cur_states = [None for _ in range(n_layer)]
-        self.n_layer = n_layer
-        self.conv_gates = nn.ModuleList(
-            [
-                nn.Conv2d(
-                    in_channels=input_dim + hidden_dim if i == 0 else hidden_dim * 2,
-                    out_channels=2 * self.hidden_dim,  # for update_gate,reset_gate respectively
-                    kernel_size=kernel_size,
-                    padding=self.padding,
-                )
-                for i in range(n_layer)
-            ]
-        )
+        assert (dim % 2) == 0
+        half_dim = dim // 2
+        self.weights = nn.Parameter(torch.randn(half_dim), requires_grad = not is_random)
 
-        self.conv_cans = nn.ModuleList(
-            [
-                nn.Conv2d(
-                    in_channels=input_dim + hidden_dim if i == 0 else hidden_dim * 2,
-                    out_channels=self.hidden_dim,  # for candidate neural memory
-                    kernel_size=kernel_size,
-                    padding=self.padding,
-                )
-                for i in range(n_layer)
-            ]
-        )
-
-    def init_hidden(self, batch_shape):
-        b, _, h, w = batch_shape
-        for i in range(self.n_layer):
-            self.cur_states[i] = torch.zeros((b, self.hidden_dim, h, w), device=self.conv_cans[0].weight.device)
-
-    def step_forward(self, input_tensor, index):
-        """
-        :param self:
-        :param input_tensor: (b, c, h, w)
-            input is actually the target_model
-        :param h_cur: (b, c_hidden, h, w)
-            current hidden and cell states respectively
-        :return: h_next,
-            next hidden state
-        """
-        h_cur = self.cur_states[index]
-        assert h_cur is not None
-        combined = torch.cat([input_tensor, h_cur], dim=1)
-        combined_conv = self.conv_gates[index](combined)
-
-        reset_gate, update_gate = torch.split(torch.sigmoid(combined_conv), self.hidden_dim, dim=1)
-        combined = torch.cat([input_tensor, reset_gate * h_cur], dim=1)
-        cc_cnm = self.conv_cans[index](combined)
-        cnm = torch.tanh(cc_cnm)
-
-        h_next = (1 - update_gate) * h_cur + update_gate * cnm
-        self.cur_states[index] = h_next
-        return h_next
-    
-    def forward(self, input_tensor):
-        for i in range(self.n_layer):
-            input_tensor = self.step_forward(input_tensor, i)
-        return input_tensor
+    def forward(self, x):
+        x = rearrange(x, 'b -> b 1')
+        freqs = x * rearrange(self.weights, 'd -> 1 d') * 2 * math.pi
+        fouriered = torch.cat((freqs.sin(), freqs.cos()), dim = -1)
+        fouriered = torch.cat((x, fouriered), dim = -1)
+        return fouriered
 
 
 class VBRCondition(nn.Module):
