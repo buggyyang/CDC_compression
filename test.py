@@ -54,7 +54,7 @@ parser.add_argument("--tensorboard_root", type=str, default="")
 parser.add_argument("--ae_path", type=str, default="")
 parser.add_argument("--use_aux_loss_weight_schedule", action="store_true", help="if use aux loss weight schedule")
 
-parser.add_argument("--prefix", type=str, default="/extra/ucibdl0/ruihan/dcae_evaluate")
+parser.add_argument("--prefix", type=str, default="*")
 parser.add_argument("--test_dataset", type=str, default="kodak")
 parser.add_argument("--img_folder", type=str, default="x_param_test")
 parser.add_argument("--bpp_folder", type=str, default="x_param_test")
