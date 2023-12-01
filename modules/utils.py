@@ -65,6 +65,7 @@ def linear_beta_schedule(timesteps):
     beta_end = scale * 0.02
     return np.linspace(beta_start, beta_end, timesteps)
 
+
 def noise(input, scale):
     return input + scale*(torch.rand_like(input) - 0.5)
 

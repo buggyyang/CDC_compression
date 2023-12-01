@@ -10,8 +10,7 @@ from .network_components import (
     PreNorm,
     LinearAttention,
     # Block,
-    ResnetBlock,
-    ImprovedSinusoidalPosEmb
+    ResnetBlock
 )
 
 
@@ -25,7 +24,6 @@ class Unet(nn.Module):
         channels=3,
         context_channels=3,
         with_time_emb=True,
-        embd_type="01"
     ):
         super().__init__()
         self.channels = channels
@@ -33,22 +31,13 @@ class Unet(nn.Module):
         dims = [channels, *map(lambda m: dim * m, dim_mults)]
         context_dims = [context_channels, *map(lambda m: dim * m, context_dim_mults)]
         in_out = list(zip(dims[:-1], dims[1:]))
-        self.embd_type = embd_type
 
         if with_time_emb:
-            if embd_type == "01":
-                time_dim = dim
-                self.time_mlp = nn.Sequential(nn.Linear(1, dim * 4), nn.GELU(), nn.Linear(dim * 4, dim))
-            elif embd_type == "index":
-                time_dim = dim
-                self.time_mlp = nn.Sequential(
-                    ImprovedSinusoidalPosEmb(time_dim // 2),
-                    nn.Linear(time_dim // 2 + 1, time_dim * 4),
-                    nn.GELU(),
-                    nn.Linear(time_dim * 4, time_dim)
-                )
-            else:
-                raise NotImplementedError
+            time_dim = dim
+            # self.time_mlp = nn.Sequential(
+            #     SinusoidalPosEmb(dim), nn.Linear(dim, dim * 4), nn.GELU(), nn.Linear(dim * 4, dim)
+            # )
+            self.time_mlp = nn.Sequential(nn.Linear(1, dim * 4), nn.GELU(), nn.Linear(dim * 4, dim))
         else:
             time_dim = None
             self.time_mlp = None
