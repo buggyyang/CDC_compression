@@ -6,6 +6,7 @@ This repository contains the codebase for our paper on Lossy Image Compression w
 
 - There are two separate folders, `epsilonparam` and `xparam`, for the epsilon-parameterization and x-parameterization models, respectively. Please use the appropriate folder depending on the model you want to work with. This is because there are some minor differences between the x-param and e-param models, making them incompatible with each other.
 - Before running the test code, please read the comments about the arguments in the code to ensure proper usage.
+- Note that this test code is provided as a template (with a sanity check example), you may need to write your own dataloader to get the actual results.
 
 ## Model Weights
 

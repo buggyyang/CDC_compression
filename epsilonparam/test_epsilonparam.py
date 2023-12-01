@@ -63,7 +63,7 @@ def main(rank):
     diffusion.eval()
     to_be_compressed = 0.5 * torch.ones(1, 3, 256, 256).to(rank)
     compressed, bpp = diffusion.compress(
-        to_be_compressed.to(rank) * 2.0 - 1.0,
+        to_be_compressed.to(rank) * 2.0 - 1.0, # normalize to -1, 1
         sample_steps=args.n_denoise_step,
         sample_mode="ddim",
         bpp_return_mean=False,
