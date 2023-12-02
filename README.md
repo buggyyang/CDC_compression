@@ -1,6 +1,6 @@
 # Lossy Image Compression with Conditional Diffusion Models
 
-This repository contains the codebase for our paper on Lossy Image Compression with Conditional Diffusion Models. We provide an off-the-shelf test code for both x-parameterization and epsilon-parameterization.
+This repository contains the codebase for our paper on [Lossy Image Compression with Conditional Diffusion Models](https://arxiv.org/pdf/2209.06950.pdf). We provide an off-the-shelf test code for both x-parameterization and epsilon-parameterization.
 
 ## Usage
 
