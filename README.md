@@ -14,3 +14,7 @@ The model weights can be downloaded from [this link](https://drive.google.com/dr
 - Why the x-param weights are approximately twice as large as the epsilon-param weights? For the x-parameterization, I saved both the exponential moving average (ema) and the latest model. When I load the model, I only load the ema.
 
 Please feel free to explore the code and experiment with the models. If you have any questions or encounter any issues, don't hesitate to reach out to us.
+
+## Environment
+
+please use the environment.yml file to create a conda environment. (It may contain redundant packages.)
