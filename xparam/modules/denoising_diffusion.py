@@ -202,7 +202,6 @@ class GaussianDiffusion(nn.Module):
         #         buffer.append(img)
         # buffer.append(img)
         e_time = ctime.time()
-        print(e_time - s_time)
         return img
 
     @torch.no_grad()

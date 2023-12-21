@@ -15,6 +15,8 @@ parser.add_argument("--ckpt", type=str, required=True) # ckpt path
 parser.add_argument("--gamma", type=float, default=0.8) # noise intensity for decoding
 parser.add_argument("--n_denoise_step", type=int, default=65) # number of denoising step
 parser.add_argument("--device", type=int, default=0) # gpu device index
+parser.add_argument("--img_dir", type=str, default='../imgs')
+parser.add_argument("--out_dir", type=str, default='../compressed_imgs')
 parser.add_argument("--lpips_weight", type=float, required=True) # either 0.9 or 0.0, note that this must match the ckpt you use, because with weight>0, the lpips-vggnet weights were also saved during training. Incorrect state_dict keys may lead to load_state_dict error when loading the ckpt.
 
 config = parser.parse_args()
@@ -67,13 +69,19 @@ def main(rank):
     diffusion.to(rank)
     diffusion.eval()
     
-    to_be_compressed = 0.5 * torch.ones(1, 3, 256, 256).to(rank)
-    compressed, bpp = diffusion.compress(
-        to_be_compressed * 2.0 - 1.0, # normalize to -1, 1
-        sample_steps=config.n_denoise_step,
-        bpp_return_mean=False,
-        init=torch.randn_like(to_be_compressed) * config.gamma
-    )
+    for img in os.listdir(config.img_dir):
+        if img.endswith(".png") or img.endswith(".jpg"):
+            to_be_compressed = torchvision.io.read_image(os.path.join(config.img_dir, img)).unsqueeze(0).float().to(rank) / 255.0
+            compressed, bpp = diffusion.compress(
+                to_be_compressed * 2.0 - 1.0,
+                sample_steps=config.n_denoise_step,
+                bpp_return_mean=True,
+                init=torch.randn_like(to_be_compressed) * config.gamma
+            )
+            compressed = compressed.clamp(-1, 1) / 2.0 + 0.5
+            pathlib.Path(config.out_dir).mkdir(parents=True, exist_ok=True)
+            torchvision.utils.save_image(compressed.cpu(), os.path.join(config.out_dir, img))
+            print("bpp:", bpp)
 
 
 if __name__ == "__main__":
