@@ -108,7 +108,7 @@ class ResnetBlock(nn.Module):
         h = self.block1(x)
 
         if exists(time_emb):
-            h += self.mlp(time_emb)[:, :, None, None]
+            h = h + self.mlp(time_emb)[:, :, None, None]
 
         h = self.block2(h)
         return h + self.res_conv(x)
@@ -474,7 +474,7 @@ class FlexiblePrior(nn.Module):
         if detach:
             for i in range(self.chain_len - 1):
                 x = self.affine[i](x, detach)
-                x += torch.tanh(self.a[i].detach()) * torch.tanh(x)
+                x = x + torch.tanh(self.a[i].detach()) * torch.tanh(x)
             if logits:
                 return self.affine[-1](x, detach).squeeze(-1).transpose(0, 1)
             return torch.sigmoid(self.affine[-1](x, detach)).squeeze(-1).transpose(0, 1)
@@ -482,7 +482,7 @@ class FlexiblePrior(nn.Module):
         # not detached
         for i in range(self.chain_len - 1):
             x = self.affine[i](x)
-            x += torch.tanh(self.a[i]) * torch.tanh(x)
+            x = x + torch.tanh(self.a[i]) * torch.tanh(x)
         if logits:
             return self.affine[-1](x).squeeze(-1).transpose(0, 1)
         return torch.sigmoid(self.affine[-1](x)).squeeze(-1).transpose(0, 1)
